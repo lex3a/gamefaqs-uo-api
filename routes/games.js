@@ -16,13 +16,22 @@ async function getGameFaqsData(path, platform) {
   page.setDefaultTimeout(500);
   await page.waitForSelector(resultsSelector);
 
+  page.on("console", async (msg) => {
+    const msgArgs = msg.args();
+    for (let i = 0; i < msgArgs.length; ++i) {
+      console.log(await msgArgs[i].jsonValue());
+    }
+  });
+
   const links = await page.evaluate((resultsSelector) => {
     const title = document.querySelector(".page-title").innerText;
     let description = document.querySelector(resultsSelector).innerText;
-    let gameData = [...document.querySelector("div.body > ol").children].map(
-      (node) => node.children[0].children[1].innerText
-    );
-    let metacriticScore = document.querySelector(".score").innerText;
+    let gameData = [...document.querySelector("div.body > ol").children].map((node) => {
+      return { tableTitle: node.children[0].children[0].innerText, tableValue: node.children[0].children[1].innerText };
+    });
+    let score = document.querySelector(".score");
+    let metacriticScore = 0;
+    if (score) metacriticScore = +score.innerText;
     let releaseDates = [...document.querySelector(".contrib > tbody").children].map((node) => node.innerText);
 
     let parsedReleaseDates = [];
@@ -31,17 +40,37 @@ async function getGameFaqsData(path, platform) {
       let [region, publisher, productId, distributionOrBarcode, releaseDate, rating] = releaseDates[i + 1].split("\t");
       parsedReleaseDates.push({ title, region, publisher, productId, distributionOrBarcode, releaseDate, rating });
     }
+    const tableValues = [
+      ["Genre", "genre"],
+      ["Developer", "developer"],
+      ["ESRB", "esrb"],
+      ["Local", "localPlayers"],
+      ["Online", "onlinePlayers"],
+      ["Wikipedia", "wikipedia"],
+    ];
+
+    let processedGameData = {
+      genre: "N/A",
+      developer: "N/A",
+      esrb: "N/A",
+      localPlayers: "N/A",
+      onlinePlayers: "N/A",
+      wikipedia: "N/A",
+    };
+
+    for (let i = 0; i < tableValues.length; i++) {
+      for (let j = 0; j < gameData.length; j++) {
+        if (gameData[j].tableTitle.includes(tableValues[i][0])) {
+          processedGameData[tableValues[i][1]] = gameData[j].tableValue;
+        }
+      }
+    }
 
     return {
       description,
       name: title.slice(0, title.length - 18),
-      genre: gameData[0] ?? "N/A",
-      developer: gameData[1] ?? "N/A",
-      esrb: gameData[2] ?? "N/A",
-      localPlayers: gameData[3] ?? "N/A",
-      onlinePlayers: gameData[4] ?? "N/A",
-      wikipedia: gameData[5] ?? "N/A",
-      metacritic: +metacriticScore ?? 0,
+      ...processedGameData,
+      metacritic: metacriticScore,
       releaseData: parsedReleaseDates,
     };
   }, resultsSelector);
