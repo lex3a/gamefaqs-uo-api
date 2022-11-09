@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
 
-const gameSchema = new mongoose.Schema({
+const gameSchema = new Schema({
   name: {
     type: String,
     required: true,
@@ -37,6 +38,21 @@ const gameSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  metacritic: {
+    type: Number,
+    required: true,
+  },
+  releaseData: [
+    new Schema({
+      distributionOrBarcode: String,
+      productId: String,
+      publisher: String,
+      rating: String,
+      region: String,
+      releaseDate: String,
+      title: String,
+    }),
+  ],
 });
 
 module.exports = mongoose.model("Game", gameSchema);

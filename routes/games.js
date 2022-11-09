@@ -16,15 +16,22 @@ async function getGameFaqsData(path, platform) {
   page.setDefaultTimeout(500);
   await page.waitForSelector(resultsSelector);
 
-  //await page.click(".show_link");
-
-  // Extract the results from the page.
   const links = await page.evaluate((resultsSelector) => {
     const title = document.querySelector(".page-title").innerText;
     let description = document.querySelector(resultsSelector).innerText;
     let gameData = [...document.querySelector("div.body > ol").children].map(
       (node) => node.children[0].children[1].innerText
     );
+    let metacriticScore = document.querySelector(".score").innerText;
+    let releaseDates = [...document.querySelector(".contrib > tbody").children].map((node) => node.innerText);
+
+    let parsedReleaseDates = [];
+    for (let i = 0; i < releaseDates.length; i += 2) {
+      let title = releaseDates[i].trim();
+      let [region, publisher, productId, distributionOrBarcode, releaseDate, rating] = releaseDates[i + 1].split("\t");
+      parsedReleaseDates.push({ title, region, publisher, productId, distributionOrBarcode, releaseDate, rating });
+    }
+
     return {
       description,
       name: title.slice(0, title.length - 18),
@@ -34,49 +41,14 @@ async function getGameFaqsData(path, platform) {
       localPlayers: gameData[3] ?? "N/A",
       onlinePlayers: gameData[4] ?? "N/A",
       wikipedia: gameData[5] ?? "N/A",
+      metacritic: +metacriticScore ?? 0,
+      releaseData: parsedReleaseDates,
     };
   }, resultsSelector);
 
   console.log({ ...links, path });
   await browser.close();
   return { ...links, path };
-}
-
-async function gameFaqsSearch(query) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-
-  await page.goto(`${GAMEFAQS_URL}`);
-
-  // Type into search box.
-  await page.type("#searchtextbox", query);
-
-  // Wait for suggest overlay to appear and click "show all results".
-  //const allResultsSelector = ".devsite-suggest-all-results";
-  //await page.waitForSelector(allResultsSelector);
-  await page.click(".mh_search");
-
-  // Wait for the results page to load and display the results.
-  const resultsSelector = ".search_result";
-  page.setDefaultTimeout(2000);
-  await page.waitForSelector(resultsSelector);
-
-  // Extract the results from the page.
-  const links = await page.evaluate((resultsSelector) => {
-    const nodes = document.querySelectorAll(resultsSelector);
-    let searchQuery = [];
-    for (let i = 0; i < nodes.length; i++) {
-      let title = nodes[i].children[1].children[0].children[0].children[0].children[0].innerText;
-      let url = nodes[i].children[1].children[0].children[0].children[0].children[0].href;
-      searchQuery.push({ title, url });
-    }
-    console.log(searchQuery);
-    return searchQuery;
-  }, resultsSelector);
-
-  console.log(links);
-  await browser.close();
-  return links;
 }
 
 router.get("/", async (req, res) => {
@@ -96,18 +68,9 @@ router.get("/:platform/:id", async (req, res) => {
     if (isGameExists) {
       res.status(200).json(await Game.findById(isGameExists));
     } else {
-      const { name, description, path, genre, developer, esrb, localPlayers, onlinePlayers, wikipedia } =
-        await getGameFaqsData(req.params.id, req.params.platform);
+      const gameData = await getGameFaqsData(req.params.id, req.params.platform);
       const game = new Game({
-        name,
-        description,
-        path,
-        genre,
-        developer,
-        esrb,
-        localPlayers,
-        onlinePlayers,
-        wikipedia,
+        ...gameData,
       });
       const newGame = await game.save();
       res.status(200).json(newGame);
